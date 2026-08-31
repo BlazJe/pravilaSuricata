@@ -25,7 +25,7 @@ alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN Xmas - FIN+PSH+URG with 
 alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN TCP SYN+FIN illegal flag combination"; flow:to_server; flags:SF+; threshold:type limit, track by_src, count 1, seconds 60; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000013; rev:1;)
 
 # Razprseni SYN po vratih, ki v tem okolju niso v uporabi (nmap -sS/-sT).
-alert tcp $EXTERNAL_NET any -> $HOME_NET ![80,443] (msg:"SCAN TCP SYN sweep of unserved ports (nmap -sS)"; flow:to_server,not_established; flags:S,CE; flowbits:isnotset,portscan.syn.counted; flowbits:set,portscan.syn.counted; threshold:type both, track by_src, count 15, seconds 1800; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000014; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET ![80,443] (msg:"SCAN TCP SYN sweep of unserved ports (nmap -sS)"; flow:to_server,not_established; flags:S,CE; flowbits:isnotset,portscan.syn.counted; flowbits:set,portscan.syn.counted; threshold:type both, track by_src, count 10, seconds 1800; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000014; rev:1;)
 
 # ----------------------------------------------------------------------------
 # neskladje pri dekodiranju (1000020-1000025)
@@ -34,15 +34,15 @@ alert tcp $EXTERNAL_NET any -> $HOME_NET ![80,443] (msg:"SCAN TCP SYN sweep of u
 # Preoblikovanje url_decode doda manjkajoco stopnjo in izenaci pogled
 
 # Ovojnica php:// v poti zahtevka. 
-alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB PHP stream wrapper in URI (double-encoding aware)"; flow:established,to_server; http.uri; url_decode; content:"php://"; nocase; fast_pattern; threshold:type limit, track by_src, count 1, seconds 60; classtype:web-application-attack; target:dest_ip; sid:1000020; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB PHP stream wrapper in URI (double-encoding aware)"; flow:established,to_server; http.uri; url_decode; content:"php://"; nocase; fast_pattern; threshold:type limit, track by_src, count 5, seconds 60; classtype:web-application-attack; target:dest_ip; sid:1000020; rev:1;)
 
 # Sistemska pot /etc/ v poti zahtevka.
-alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Sensitive system path in URI (double-encoding aware)"; flow:established,to_server; http.uri; url_decode; content:"/etc/"; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000021; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Sensitive system path in URI (double-encoding aware)"; flow:established,to_server; http.uri; url_decode; content:"/etc/"; nocase; fast_pattern; threshold:type limit, track by_src, count 5, seconds 60; classtype:web-application-attack; target:dest_ip; sid:1000021; rev:1;)
 
 # UNION SELECT v telesu POST. http.request_body se privzeto sploh ne
 # dekodira, zato je url_decode tu nujen, sicer zapis %55NION pravilo obide.
-# within:12 pokrije union/**/select in union all select.
-alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi UNION SELECT in POST body (URL-encoded evasion)"; flow:established,to_server; http.request_body; url_decode; content:"union"; nocase; fast_pattern; content:"select"; nocase; distance:0; within:12; classtype:web-application-attack; target:dest_ip; sid:1000022; rev:1;)
+# within:20 pokrije union/**/select in union all select.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi UNION SELECT in POST body (URL-encoded evasion)"; flow:established,to_server; http.request_body; url_decode; content:"union"; nocase; fast_pattern; content:"select"; nocase; distance:0; within:20; classtype:web-application-attack; target:dest_ip; sid:1000022; rev:1;)
 
 # Zaporedje %25 v nenormalizirani poti
 alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Double URL-encoded sequence in URI"; flow:established,to_server; http.uri.raw; content:"%25"; fast_pattern; threshold:type limit, track by_src, count 1, seconds 60; classtype:bad-unknown; target:dest_ip; sid:1000023; rev:1;)
@@ -75,4 +75,4 @@ alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"POLICY devblog admin panel s
 alert http any any -> $HOME_NET any (msg:"WEB uploaded file contains PHP open tag"; flow:established,to_server; file.data; content:"<?php"; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000034; rev:1;)
 
 # Nalozena datoteka vsebuje kratko oznako <?=. 
-alert http any any -> $HOME_NET any (msg:"WEB uploaded file contains PHP open tag"; flow:established,to_server; file.data; content:"<?="; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000035; rev:1;)
+alert http any any -> $HOME_NET any (msg:"WEB uploaded file contains PHP short open tag"; flow:established,to_server; file.data; content:"<?="; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000035; rev:1;)
