@@ -42,7 +42,7 @@ alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Sensitive system path in
 # UNION SELECT v telesu POST. http.request_body se privzeto sploh ne
 # dekodira, zato je url_decode tu nujen, sicer zapis %55NION pravilo obide.
 # within:20 pokrije union/**/select in union all select.
-alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi UNION SELECT in POST body (URL-encoded evasion)"; flow:established,to_server; http.request_body; url_decode; content:"union"; nocase; fast_pattern; content:"select"; nocase; distance:0; within:20; classtype:web-application-attack; target:dest_ip; sid:1000022; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi UNION SELECT in POST body (URL-encoded evasion)"; flow:established,to_server; http.request_body; url_decode; content:"union"; nocase; fast_pattern; content:"select"; nocase; distance:0; within:20; threshold:type limit, track by_src, count 5, seconds 60; classtype:web-application-attack; target:dest_ip; sid:1000022; rev:1;)
 
 # Zaporedje %25 v nenormalizirani poti
 alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Double URL-encoded sequence in URI"; flow:established,to_server; http.uri.raw; content:"%25"; fast_pattern; threshold:type limit, track by_src, count 1, seconds 60; classtype:bad-unknown; target:dest_ip; sid:1000023; rev:1;)
@@ -52,7 +52,7 @@ alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Double URL-encoded seque
 alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Long base64 blob passed as URI parameter"; flow:established,to_server; urilen:>80; http.uri; pcre:"/=[A-Za-z0-9+\/]{64,}={0,2}/"; threshold:type limit, track by_src, count 1, seconds 60; classtype:bad-unknown; target:dest_ip; sid:1000024; rev:1;)
 
 # Tavtologija ali zacetek komentarja SQL v parametru username.
-alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi in username parameter (URL-encoded evasion)"; flow:established,to_server; http.method; content:"POST"; http.request_body; url_decode; content:"username="; fast_pattern; pcre:"/username=[^&]*'\s*(--\s|#|(or|and)[\s(])/i"; classtype:web-application-attack; target:dest_ip; sid:1000025; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi in username parameter (URL-encoded evasion)"; flow:established,to_server; http.method; content:"POST"; http.request_body; url_decode; content:"username="; fast_pattern; pcre:"/username=[^&]*'\s*(--\s|#|(or|and)[\s(])/i"; threshold:type limit, track by_src, count 5, seconds 60; classtype:web-application-attack; target:dest_ip; sid:1000025; rev:1;)
 
 # ----------------------------------------------------------------------------
 # aplikacijsko specificna pravila (1000030-1000035)
