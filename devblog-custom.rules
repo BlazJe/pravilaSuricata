@@ -69,7 +69,7 @@ alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"WEB PHP source code in HTTP 
 alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"WEB base64-encoded PHP source in HTTP response"; flow:established,to_client; file.data; content:"PD9waHA"; fast_pattern; threshold:type limit, track by_dst, count 2, seconds 300; classtype:successful-recon-limited; target:src_ip; sid:1000032; rev:1;)
 
 # Vrnjena stran skrbnika zunaj notranje mreze.
-alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"POLICY devblog admin panel served to external client"; flow:established,to_client; file.data; content:"<h1>Admin panel</h1>"; fast_pattern; threshold:type limit, track by_dst, count 1, seconds 300; classtype:successful-admin; target:src_ip; sid:1000033; rev:1;)
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"Devblog admin panel served to external client"; flow:established,to_client; file.data; content:"<h1>Admin panel</h1>"; fast_pattern; threshold:type limit, track by_dst, count 1, seconds 300; classtype:successful-admin; target:src_ip; sid:1000033; rev:1;)
 
 # Nalozena datoteka vsebuje oznako <?php. 
 alert http any any -> $HOME_NET any (msg:"WEB uploaded file contains PHP open tag"; flow:established,to_server; file.data; content:"<?php"; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000034; rev:1;)
