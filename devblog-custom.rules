@@ -1,0 +1,78 @@
+# ============================================================================
+#
+# Diplomska naloga: Analiza privzetih pravil sistema Suricata:
+#                   primer spletne aplikacije
+#
+# 17 pravil, SID 1000010-1000035
+# 
+# HOME_NET:   [192.168.50.10/32,10.0.0.0/8,172.16.0.0/12]
+# EXTERNAL_NET: any
+#
+# ----------------------------------------------------------------------------
+# pregledovanje vrat (1000010-1000014)
+# ----------------------------------------------------------------------------
+
+# NULL scan - paket TCP brez zastavic (nmap -sN).
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN NULL - TCP packet with no flags set (nmap -sN)"; flow:to_server; flags:0,CE; threshold:type limit, track by_src, count 1, seconds 60; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000010; rev:1;)
+
+# FIN brez ACK (nmap -sF).
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN FIN - bare FIN with no ACK (nmap -sF)"; flow:to_server; flags:F,CE; threshold:type limit, track by_src, count 1, seconds 60; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000011; rev:1;)
+
+# Xmas scan - FIN+PSH+URG (nmap -sX).
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN Xmas - FIN+PSH+URG with no ACK (nmap -sX)"; flow:to_server; flags:FPU,CE; threshold:type limit, track by_src, count 1, seconds 60; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000012; rev:1;)
+
+# SYN in FIN v istem paketu (nmap --scanflags SYNFIN).
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"SCAN TCP SYN+FIN illegal flag combination"; flow:to_server; flags:SF+; threshold:type limit, track by_src, count 1, seconds 60; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000013; rev:1;)
+
+# Razprseni SYN po vratih, ki v tem okolju niso v uporabi (nmap -sS/-sT).
+alert tcp $EXTERNAL_NET any -> $HOME_NET ![80,443] (msg:"SCAN TCP SYN sweep of unserved ports (nmap -sS)"; flow:to_server,not_established; flags:S,CE; flowbits:isnotset,portscan.syn.counted; flowbits:set,portscan.syn.counted; threshold:type both, track by_src, count 15, seconds 1800; classtype:attempted-recon; target:dest_ip; metadata:attack_target Server, tool nmap; sid:1000014; rev:1;)
+
+# ----------------------------------------------------------------------------
+# neskladje pri dekodiranju (1000020-1000025)
+# ----------------------------------------------------------------------------
+# Suricata http.uri dekodira enkrat, http.request_body pa sploh ne.
+# Preoblikovanje url_decode doda manjkajoco stopnjo in izenaci pogled
+
+# Ovojnica php:// v poti zahtevka. 
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB PHP stream wrapper in URI (double-encoding aware)"; flow:established,to_server; http.uri; url_decode; content:"php://"; nocase; fast_pattern; threshold:type limit, track by_src, count 1, seconds 60; classtype:web-application-attack; target:dest_ip; sid:1000020; rev:1;)
+
+# Sistemska pot /etc/ v poti zahtevka.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Sensitive system path in URI (double-encoding aware)"; flow:established,to_server; http.uri; url_decode; content:"/etc/"; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000021; rev:1;)
+
+# UNION SELECT v telesu POST. http.request_body se privzeto sploh ne
+# dekodira, zato je url_decode tu nujen, sicer zapis %55NION pravilo obide.
+# within:12 pokrije union/**/select in union all select.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi UNION SELECT in POST body (URL-encoded evasion)"; flow:established,to_server; http.request_body; url_decode; content:"union"; nocase; fast_pattern; content:"select"; nocase; distance:0; within:12; classtype:web-application-attack; target:dest_ip; sid:1000022; rev:1;)
+
+# Zaporedje %25 v nenormalizirani poti
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Double URL-encoded sequence in URI"; flow:established,to_server; http.uri.raw; content:"%25"; fast_pattern; threshold:type limit, track by_src, count 1, seconds 60; classtype:bad-unknown; target:dest_ip; sid:1000023; rev:1;)
+
+# Dolg niz base64 kot parameter v naslovu.
+# Ne loci zakodiranega ukaza od zetona seje.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB Long base64 blob passed as URI parameter"; flow:established,to_server; urilen:>80; http.uri; pcre:"/=[A-Za-z0-9+\/]{64,}={0,2}/"; threshold:type limit, track by_src, count 1, seconds 60; classtype:bad-unknown; target:dest_ip; sid:1000024; rev:1;)
+
+# Tavtologija ali zacetek komentarja SQL v parametru username.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"WEB SQLi in username parameter (URL-encoded evasion)"; flow:established,to_server; http.method; content:"POST"; http.request_body; url_decode; content:"username="; fast_pattern; pcre:"/username=[^&]*'\s*(--\s|#|(or|and)[\s(])/i"; classtype:web-application-attack; target:dest_ip; sid:1000025; rev:1;)
+
+# ----------------------------------------------------------------------------
+# aplikacijsko specificna pravila (1000030-1000035)
+# ----------------------------------------------------------------------------
+# Izkoriscajo znanje o konkretni aplikaciji: shemo baze, imena datotek in poti.
+
+# Razkritje sheme tabele users v odzivu streznika (password ... varchar).
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"WEB devblog users table schema disclosed in HTTP response"; flow:established,to_client; file.data; content:"password"; nocase; fast_pattern; content:"varchar"; nocase; distance:0; within:24; threshold:type limit, track by_dst, count 2, seconds 300; classtype:successful-recon-limited; target:src_ip; sid:1000030; rev:1;)
+
+# Izvorna koda PHP v telesu odziva.
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"WEB PHP source code in HTTP response body"; flow:established,to_client; file.data; content:"<?php"; nocase; fast_pattern; threshold:type limit, track by_dst, count 2, seconds 300; classtype:successful-recon-limited; target:src_ip; sid:1000031; rev:1;)
+
+# Izvorna koda PHP v zapisu base64 (PD9waHA = <?php)
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"WEB base64-encoded PHP source in HTTP response"; flow:established,to_client; file.data; content:"PD9waHA"; fast_pattern; threshold:type limit, track by_dst, count 2, seconds 300; classtype:successful-recon-limited; target:src_ip; sid:1000032; rev:1;)
+
+# Vrnjena stran skrbnika zunaj notranje mreze.
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"POLICY devblog admin panel served to external client"; flow:established,to_client; file.data; content:"<h1>Admin panel</h1>"; fast_pattern; threshold:type limit, track by_dst, count 1, seconds 300; classtype:successful-admin; target:src_ip; sid:1000033; rev:1;)
+
+# Nalozena datoteka vsebuje oznako <?php. 
+alert http any any -> $HOME_NET any (msg:"WEB uploaded file contains PHP open tag"; flow:established,to_server; file.data; content:"<?php"; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000034; rev:1;)
+
+# Nalozena datoteka vsebuje kratko oznako <?=. 
+alert http any any -> $HOME_NET any (msg:"WEB uploaded file contains PHP open tag"; flow:established,to_server; file.data; content:"<?="; nocase; fast_pattern; classtype:web-application-attack; target:dest_ip; sid:1000035; rev:1;)
